@@ -25,31 +25,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          arquivos=()
-          for parte in 01 02 03 04 05 06 07 08; do
-            arquivo=".release/package.part${parte}"
-            test -s "$arquivo" || { echo "ERRO: fragmento ausente ou vazio: $arquivo"; exit 1; }
-            arquivos+=("$arquivo")
+          rm -f /tmp/mutarena-release.tar.gz
+          touch /tmp/mutarena-release.tar.gz
+
+          for parte in 01 02 03 04 05 06; do
+            arquivo=".release/package.part${parte}.b64"
+            test -s "$arquivo" || { echo "ERRO: parte ausente: $arquivo"; exit 1; }
+            base64 --decode "$arquivo" >> /tmp/mutarena-release.tar.gz
           done
 
-          cat "${arquivos[@]}" | tr -d '\r\n\t ' > /tmp/mutarena-release.b64
-          base64 --decode --ignore-garbage /tmp/mutarena-release.b64 > /tmp/mutarena-release.tar.gz
-          tar -tzf /tmp/mutarena-release.tar.gz > /dev/null || {
-            echo "ERRO: o pacote reconstruído não é um arquivo tar.gz válido."
-            exit 1
-          }
+          for parte in 07 08; do
+            arquivo=".release/package.part${parte}.bin"
+            test -s "$arquivo" || { echo "ERRO: parte ausente: $arquivo"; exit 1; }
+            cat "$arquivo" >> /tmp/mutarena-release.tar.gz
+          done
+
+          echo '8fdde969a40efb1b6d3ac3cab1cd24b4ff076a88a26333e76a0b259cc48fc9f4  /tmp/mutarena-release.tar.gz' | sha256sum --check
+          tar -tzf /tmp/mutarena-release.tar.gz > /dev/null
 
           rm -rf /tmp/mutarena-site
           mkdir -p /tmp/mutarena-site
           tar -xzf /tmp/mutarena-release.tar.gz -C /tmp/mutarena-site
-          test -f /tmp/mutarena-site/index.html || {
-            echo "ERRO: index.html não foi encontrado no pacote."
-            find /tmp/mutarena-site -maxdepth 3 -type f -print
-            exit 1
-          }
+          test -f /tmp/mutarena-site/index.html
           touch /tmp/mutarena-site/.nojekyll
-          echo "Pacote reconstruído com sucesso."
-          find /tmp/mutarena-site -maxdepth 3 -type f -print | sort
+
+          echo "Pacote íntegro e index.html encontrados."
 
       - name: Criar branch gh-pages
         shell: bash
