@@ -40,7 +40,7 @@ jobs:
             cat "$arquivo" >> /tmp/mutarena-release.tar.gz
           done
 
-          echo '8fdde969a40efb1b6d3ac3cab1cd24b4ff076a88a26333e76a0b259cc48fc9f4  /tmp/mutarena-release.tar.gz' | sha256sum --check
+          echo 'eb059880a8afc0cf25490e8f529a4abcdc7b14fc17559ff729c877921b386a06  /tmp/mutarena-release.tar.gz' | sha256sum --check
           tar -tzf /tmp/mutarena-release.tar.gz > /dev/null
 
           rm -rf /tmp/mutarena-site
