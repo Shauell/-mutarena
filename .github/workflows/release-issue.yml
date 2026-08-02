@@ -1,79 +1,68 @@
-name: Publicar MUTARENA
+name: Preparar site MUTARENA
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: mutarena-pages
+  group: mutarena-release
   cancel-in-progress: true
 
 jobs:
   publicar:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Baixar repositório
         uses: actions/checkout@v6
         with:
           ref: lua
+          fetch-depth: 0
 
-      - name: Conferir fragmentos do pacote
+      - name: Reconstruir arquivos do jogo
         shell: bash
         run: |
           set -euo pipefail
+          arquivos=()
           for parte in 01 02 03 04 05 06 07 08; do
             arquivo=".release/package.part${parte}"
-            test -s "$arquivo" || { echo "Fragmento ausente ou vazio: $arquivo"; exit 1; }
+            test -s "$arquivo" || { echo "ERRO: fragmento ausente ou vazio: $arquivo"; exit 1; }
+            arquivos+=("$arquivo")
           done
 
-      - name: Reconstruir pacote oficial
+          cat "${arquivos[@]}" | tr -d '\r\n\t ' > /tmp/mutarena-release.b64
+          base64 --decode --ignore-garbage /tmp/mutarena-release.b64 > /tmp/mutarena-release.tar.gz
+          tar -tzf /tmp/mutarena-release.tar.gz > /dev/null || {
+            echo "ERRO: o pacote reconstruído não é um arquivo tar.gz válido."
+            exit 1
+          }
+
+          rm -rf /tmp/mutarena-site
+          mkdir -p /tmp/mutarena-site
+          tar -xzf /tmp/mutarena-release.tar.gz -C /tmp/mutarena-site
+          test -f /tmp/mutarena-site/index.html || {
+            echo "ERRO: index.html não foi encontrado no pacote."
+            find /tmp/mutarena-site -maxdepth 3 -type f -print
+            exit 1
+          }
+          touch /tmp/mutarena-site/.nojekyll
+          echo "Pacote reconstruído com sucesso."
+          find /tmp/mutarena-site -maxdepth 3 -type f -print | sort
+
+      - name: Criar branch gh-pages
         shell: bash
         run: |
           set -euo pipefail
-          cat \
-            .release/package.part01 \
-            .release/package.part02 \
-            .release/package.part03 \
-            .release/package.part04 \
-            .release/package.part05 \
-            .release/package.part06 \
-            .release/package.part07 \
-            .release/package.part08 \
-            > /tmp/mutarena-release.b64
-          base64 --decode /tmp/mutarena-release.b64 > /tmp/mutarena-release.tar.gz
-          echo '8fdde969a40efb1b6d3ac3cab1cd24b4ff076a88a26333e76a0b259cc48fc9f4  /tmp/mutarena-release.tar.gz' | sha256sum --check
-          tar -tzf /tmp/mutarena-release.tar.gz > /dev/null
-          mkdir -p /tmp/mutarena-release
-          tar -xzf /tmp/mutarena-release.tar.gz -C /tmp/mutarena-release
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
-      - name: Preparar Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          package-manager-cache: false
+          git checkout --orphan gh-pages-temp
+          git rm -rf . || true
+          cp -a /tmp/mutarena-site/. .
+          git add --all
+          git commit -m 'Publica MUTARENA 4.0.0'
+          git push --force origin HEAD:gh-pages
 
-      - name: Executar testes
-        working-directory: /tmp/mutarena-release
-        run: npm test
-
-      - name: Configurar GitHub Pages
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
-
-      - name: Empacotar site
-        uses: actions/upload-pages-artifact@v4
-        with:
-          path: /tmp/mutarena-release
-
-      - name: Publicar site
-        id: deployment
-        uses: actions/deploy-pages@v4
+          echo "Branch gh-pages criada com sucesso."
